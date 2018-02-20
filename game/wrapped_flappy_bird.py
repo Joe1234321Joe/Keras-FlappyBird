@@ -6,7 +6,7 @@ import flappy_bird_utils
 import pygame.surfarray as surfarray
 from pygame.locals import *
 from itertools import cycle
-
+import time
 FPS = 30
 SCREENWIDTH  = 288
 SCREENHEIGHT = 512
@@ -60,7 +60,12 @@ class GameState:
     def frame_step(self, input_actions):
         pygame.event.pump()
 
-        reward = 0.1
+        #reward = 0.1
+        reward = 0
+        if self.playery >= 90:
+            reward = 0.1
+        if self.playery >= 120:
+            reward = 0.2
         terminal = False
 
         if sum(input_actions) != 1:
@@ -141,7 +146,9 @@ class GameState:
         image_data = pygame.surfarray.array3d(pygame.display.get_surface())
         pygame.display.update()
         #print ("FPS" , FPSCLOCK.get_fps())
-	FPSCLOCK.tick(FPS)
+        FPSCLOCK.tick(FPS)
+        
+
         #print self.upperPipes[0]['y'] + PIPE_HEIGHT - int(BASEY * 0.2)
         return image_data, reward, terminal
 
@@ -181,7 +188,9 @@ def checkCrash(player, upperPipes, lowerPipes):
     pi = player['index']
     player['w'] = IMAGES['player'][0].get_width()
     player['h'] = IMAGES['player'][0].get_height()
-
+    # add die if hit roof.
+    if player['y'] + player['h'] <= 40:
+        return True
     # if player crashes into ground
     if player['y'] + player['h'] >= BASEY - 1:
         return True

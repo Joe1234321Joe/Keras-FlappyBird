@@ -14,28 +14,27 @@ import numpy as np
 from collections import deque
 
 import json
-from keras import initializations
-from keras.initializations import normal, identity
+from keras import initializers
+from keras.initializers import normal, identity
 from keras.models import model_from_json
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
 from keras.optimizers import SGD , Adam
 import tensorflow as tf
-
+import csv 
 GAME = 'bird' # the name of the game being played for log files
 CONFIG = 'nothreshold'
 ACTIONS = 2 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
 OBSERVATION = 3200. # timesteps to observe before training
-EXPLORE = 3000000. # frames over which to anneal epsilon
+EXPLORE = 300000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
 INITIAL_EPSILON = 0.1 # starting value of epsilon
 REPLAY_MEMORY = 50000 # number of previous transitions to remember
 BATCH = 32 # size of minibatch
 FRAME_PER_ACTION = 1
 LEARNING_RATE = 1e-4
-
 img_rows , img_cols = 80, 80
 #Convert image into Black and white
 img_channels = 4 #We stack 4 frames
@@ -80,7 +79,7 @@ def trainNetwork(model,args):
 
     #In Keras, need to reshape
     s_t = s_t.reshape(1, s_t.shape[0], s_t.shape[1], s_t.shape[2])  #1*80*80*4
-
+    cumu_award = 0
     
 
     if args['mode'] == 'Run':
@@ -105,9 +104,10 @@ def trainNetwork(model,args):
         #choose an action epsilon greedy
         if t % FRAME_PER_ACTION == 0:
             if random.random() <= epsilon:
-                print("----------Random Action----------")
+                #print("----------Random Action----------")
                 action_index = random.randrange(ACTIONS)
                 a_t[action_index] = 1
+                #a_t[0] = 1
             else:
                 q = model.predict(s_t)       #input a stack of 4 images, get the prediction
                 max_Q = np.argmax(q)
@@ -170,7 +170,7 @@ def trainNetwork(model,args):
         t = t + 1
 
         # save progress every 10000 iterations
-        if t % 1000 == 0:
+        if t % 10000 == 0:
             print("Now we save model")
             model.save_weights("model.h5", overwrite=True)
             with open("model.json", "w") as outfile:
@@ -184,10 +184,17 @@ def trainNetwork(model,args):
             state = "explore"
         else:
             state = "train"
-
+        cumu_award += r_t
+        if t % 500 == 0:
+            fields=["TIMESTEP", t,  "/ REWARD", cumu_award, \
+                "/ Q_MAX " , np.max(Q_sa), "/ Loss ", loss]
+            with open(r'log_game.csv', 'a') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(fields)
+                    cumu_award = 0
         print("TIMESTEP", t, "/ STATE", state, \
-            "/ EPSILON", epsilon, "/ ACTION", action_index, "/ REWARD", r_t, \
-            "/ Q_MAX " , np.max(Q_sa), "/ Loss ", loss)
+                    "/ EPSILON", epsilon, "/ ACTION", action_index, "/ REWARD", r_t, \
+                    "/ Q_MAX " , np.max(Q_sa), "/ Loss ", loss)
 
     print("Episode finished!")
     print("************************")

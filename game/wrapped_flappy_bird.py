@@ -87,6 +87,7 @@ class GameState:
                 self.score += 1
                 #SOUNDS['point'].play()
                 reward = 1
+                print('reward')
 
         # playerIndex basex change
         if (self.loopIter + 1) % 3 == 0:

@@ -18,21 +18,22 @@ from keras import initializers
 from keras.initializers import normal, identity
 from keras.models import model_from_json
 from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation, Flatten
+from keras.layers.core import Dense, Dropout, Activation
 from keras.layers.convolutional import Convolution2D, MaxPooling2D
-from keras.optimizers import SGD , Adam
+from keras.layers import Input, GlobalAveragePooling2D
+from keras.optimizers import Adam
 import tensorflow as tf
 import csv 
 GAME = 'bird' # the name of the game being played for log files
 CONFIG = 'nothreshold'
 ACTIONS = 2 # number of valid actions
 GAMMA = 0.99 # decay rate of past observations
-OBSERVATION = 3200. # timesteps to observe before training
-EXPLORE = 300000. # frames over which to anneal epsilon
+OBSERVATION = 4 # timesteps to observe before training
+EXPLORE = 50000. # frames over which to anneal epsilon
 FINAL_EPSILON = 0.0001 # final value of epsilon
-INITIAL_EPSILON = 0.1 # starting value of epsilon
-REPLAY_MEMORY = 50000 # number of previous transitions to remember
-BATCH = 32 # size of minibatch
+INITIAL_EPSILON = 0.05 # starting value of epsilon
+REPLAY_MEMORY = 15000 # number of previous transitions to remember
+BATCH = 4 # size of minibatch
 FRAME_PER_ACTION = 1
 LEARNING_RATE = 1e-4
 img_rows , img_cols = 80, 80
@@ -42,21 +43,28 @@ img_channels = 4 #We stack 4 frames
 def buildmodel():
     print("Now we build the model")
     model = Sequential()
-    model.add(Convolution2D(32, 8, 8, subsample=(4, 4), border_mode='same',input_shape=(img_rows,img_cols,img_channels)))  #80*80*4
+    model.add(Convolution2D(32, 3, 3, subsample=(4, 4), border_mode='same',input_shape=(img_rows,img_cols,img_channels)))  #80*80*4
     model.add(Activation('relu'))
-    model.add(Convolution2D(64, 4, 4, subsample=(2, 2), border_mode='same'))
+    #model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Convolution2D(64, 3, 3, subsample=(2, 2), border_mode='same'))
     model.add(Activation('relu'))
-    model.add(Convolution2D(64, 3, 3, subsample=(1, 1), border_mode='same'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(Convolution2D(128, 3, 3, subsample=(1, 1), border_mode='same'))
     model.add(Activation('relu'))
-    model.add(Flatten())
-    model.add(Dense(512))
+    model.add(Convolution2D(256, 3, 3, subsample=(1, 1), border_mode='same'))
     model.add(Activation('relu'))
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    model.add(GlobalAveragePooling2D())
+    #model.add(Dense(256))
+    #model.add(Activation('relu'))
     model.add(Dense(2))
    
     adam = Adam(lr=LEARNING_RATE)
     model.compile(loss='mse',optimizer=adam)
+    model.summary()
     print("We finish building the model")
     return model
+
 
 def trainNetwork(model,args):
     # open up a game state to communicate with emulator
@@ -93,7 +101,7 @@ def trainNetwork(model,args):
     else:                       #We go to training mode
         OBSERVE = OBSERVATION
         epsilon = INITIAL_EPSILON
-
+    cumu_loss = 0
     t = 0
     while (True):
         loss = 0
@@ -104,8 +112,10 @@ def trainNetwork(model,args):
         #choose an action epsilon greedy
         if t % FRAME_PER_ACTION == 0:
             if random.random() <= epsilon:
+                action_index = 0
                 #print("----------Random Action----------")
-                action_index = random.randrange(ACTIONS)
+                if random.random()>.75:
+                    action_index = 1
                 a_t[action_index] = 1
                 #a_t[0] = 1
             else:
@@ -141,7 +151,7 @@ def trainNetwork(model,args):
 
 
             inputs = np.zeros((BATCH, s_t.shape[1], s_t.shape[2], s_t.shape[3]))   #32, 80, 80, 4
-            print (inputs.shape)
+            #print (inputs.shape)
             targets = np.zeros((inputs.shape[0], ACTIONS))                         #32, 2
 
             #Now we do the experience replay
@@ -185,16 +195,19 @@ def trainNetwork(model,args):
         else:
             state = "train"
         cumu_award += r_t
-        if t % 500 == 0:
+        cumu_loss += loss
+        if t % 1000 == 0:
             fields=["TIMESTEP", t,  "/ REWARD", cumu_award, \
-                "/ Q_MAX " , np.max(Q_sa), "/ Loss ", loss]
+                "/ Q_MAX " , np.max(Q_sa), "/ cumu_loss ", cumu_loss]
             with open(r'log_game.csv', 'a') as f:
                     writer = csv.writer(f)
                     writer.writerow(fields)
-                    cumu_award = 0
-        print("TIMESTEP", t, "/ STATE", state, \
-                    "/ EPSILON", epsilon, "/ ACTION", action_index, "/ REWARD", r_t, \
-                    "/ Q_MAX " , np.max(Q_sa), "/ Loss ", loss)
+            print("TIMESTEP", t, "/ STATE", state, \
+                        "/ EPSILON", epsilon, "/ ACTION", action_index,
+                        "/ REWARD", cumu_award, \
+                        "/ Q_MAX " , np.max(Q_sa), "/ cumu_loss ", cumu_loss)
+            cumu_loss = 0
+            cumu_award = 0
 
     print("Episode finished!")
     print("************************")
